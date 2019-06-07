@@ -2,26 +2,26 @@
    +----------------------------------------------------------------------+
    | Xdebug                                                               |
    +----------------------------------------------------------------------+
-   | Copyright (c) 2002-2016 Derick Rethans                               |
+   | Copyright (c) 2002-2018 Derick Rethans                               |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 1.0 of the Xdebug license,    |
+   | This source file is subject to version 1.01 of the Xdebug license,   |
    | that is bundled with this package in the file LICENSE, and is        |
    | available at through the world-wide-web at                           |
    | https://xdebug.org/license.php                                       |
    | If you did not receive a copy of the Xdebug license and are unable   |
    | to obtain it through the world-wide-web, please send a note to       |
-   | xdebug@derickrethans.nl so we can mail you a copy immediately.       |
+   | derick@xdebug.org so we can mail you a copy immediately.             |
    +----------------------------------------------------------------------+
-   | Authors:  Derick Rethans <derick@xdebug.org>                         |
-   |           Marco Canini <m.canini@libero.it>                          |
-   |           Thomas Vanhaniemi <thomas.vanhaniemi@arcada.fi>            |
+   | Authors: Derick Rethans <derick@xdebug.org>                          |
+   |          Marco Canini <m.canini@libero.it>                           |
+   |          Thomas Vanhaniemi <thomas.vanhaniemi@arcada.fi>             |
    +----------------------------------------------------------------------+
  */
 
 #include <stdio.h>
 #include <sys/types.h>
 #ifndef WIN32
-#ifdef HAVE_CONFIG_H 
+#ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
 #include <unistd.h>
@@ -56,7 +56,7 @@
 #define MSG_NOSIGNAL 0
 #endif
 
-#define DEBUGCLIENT_VERSION "0.11.0"
+#define DEBUGCLIENT_VERSION "0.12.0"
 #define DEFAULT_PORT        9000
 
 #define IPV4                4
@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
 
 	/* Display copyright notice and version number */
 	printf("Xdebug Simple DBGp client (%s)\n", DEBUGCLIENT_VERSION);
-	printf("Copyright 2002-2016 by Derick Rethans.\n");
+	printf("Copyright 2002-2018 by Derick Rethans.\n");
 #ifdef HAVE_LIBEDIT
 	printf("- libedit support: enabled\n");
 #endif
@@ -288,7 +288,7 @@ int main(int argc, char *argv[])
 		while ((buffer = fd_read_line_delim(fd, &cxt, FD_RL_SOCKET, '\0', &length)) > 0) {
 			buffer = fd_read_line_delim(fd, &cxt, FD_RL_SOCKET, '\0', &length);
 			printf ("%s\n", buffer);
-			if (strstr(buffer, "<stream") == NULL)
+			if ((strstr(buffer, "<stream") == NULL) && (strstr(buffer, "<notify") == NULL))
 			{
 				/* The server requires a new command */
 

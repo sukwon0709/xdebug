@@ -1,7 +1,5 @@
 --TEST--
 Test for bug #558: PHP segfaults when running a nested eval while tracing.
---SKIPIF--
-<?php if (!version_compare(phpversion(), "7.0", '>=')) echo "skip >= PHP 7.0 needed\n"; ?>
 --INI--
 xdebug.auto_trace=0
 xdebug.collect_assignments=0

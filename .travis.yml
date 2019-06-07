@@ -3,10 +3,15 @@ sudo: false
 language: php
 
 php:
-  - 5.5
-  - 5.6
   - 7.0
   - 7.1
+  - 7.2
+  - 7.3
+  - nightly
+
+matrix:
+  allow_failures:
+    - php: nightly
 
 env:
   - USE_OPCACHE=0
@@ -14,17 +19,30 @@ env:
 
 before_script:
   - phpenv config-rm xdebug.ini || echo "xdebug not available"
-  - ./.travis.scripts/compile.sh
+  - sh -e ./.travis.scripts/compile.sh
+  # Add an IPv6 config - see the corresponding Travis issue
+  # https://github.com/travis-ci/travis-ci/issues/8361
+  - if [ "${TRAVIS_OS_NAME}" == "linux" ]; then
+      sudo sh -c 'echo 0 > /proc/sys/net/ipv6/conf/all/disable_ipv6';
+    fi
 
 notifications:
   email:
     derick@xdebug.org
 
 script:
-  - MYPHP=`make findphp`
-  - export PATH=`dirname $MYPHP`:$PATH
-  - $MYPHP -c /tmp/temp-php-config.ini -v
-  - REPORT_EXIT_STATUS=1 TEST_PHP_EXECUTABLE=$MYPHP $MYPHP -c /tmp/temp-php-config.ini -dxdebug.auto_trace=0 run-tests.php -q -x --show-diff
+  - sudo sh -c 'echo "\n::1 localhost\n" >> /etc/hosts'
+  - export TEST_PHP_EXECUTABLE=`make findphp`
+  - export PATH=`dirname $TEST_PHP_EXECUTABLE`:$PATH
+  - TEST_PHP_ARGS="-n -d foo=1"
+  - if [[ "$USE_OPCACHE" == "1" ]]; then TEST_PHP_ARGS="$TEST_PHP_ARGS -d zend_extension=opcache.so -d opcache.enable=1 -d opcache.enable_cli=1"; fi
+  - export TEST_PHP_ARGS="$TEST_PHP_ARGS -d zend_extension=$PWD/modules/xdebug.so"
+  - export REPORT_EXIT_STATUS=1
+  - $TEST_PHP_EXECUTABLE $TEST_PHP_ARGS -v
+  - $TEST_PHP_EXECUTABLE -n run-tests.php -q -x --show-diff
+
+after_script:
+  - ./.travis.scripts/show-errors.sh
 
 notifications:
-  irc: "irc.freenode.net#xdebug"
+  irc: "chat.freenode.net#xdebug"

@@ -1,7 +1,5 @@
 --TEST--
-Test for assertion callbacks and exception (>= PHP 7.0)
---SKIPIF--
-<?php if (!version_compare(phpversion(), "7.0", '>=')) echo "skip >= PHP 7.0 needed\n"; ?>
+Test for assertion callbacks and exception
 --INI--
 xdebug.enable=1
 xdebug.auto_trace=0
@@ -37,7 +35,7 @@ assert_options (ASSERT_CALLBACK, 'my_assert_handler');
 // Make an assertion that should fail
 try
 {
-	assert ('1==2', "One is not two");
+	@assert ('1==2', "One is not two");
 } catch (AssertionError $e )
 {
 	echo "\n", $e->getMessage(), "\n";

@@ -2,17 +2,17 @@
    +----------------------------------------------------------------------+
    | Xdebug                                                               |
    +----------------------------------------------------------------------+
-   | Copyright (c) 2002-2016 Derick Rethans                               |
+   | Copyright (c) 2002-2018 Derick Rethans                               |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 1.0 of the Xdebug license,    |
+   | This source file is subject to version 1.01 of the Xdebug license,   |
    | that is bundled with this package in the file LICENSE, and is        |
    | available at through the world-wide-web at                           |
-   | http://xdebug.derickrethans.nl/license.php                           |
+   | https://xdebug.org/license.php                                       |
    | If you did not receive a copy of the Xdebug license and are unable   |
    | to obtain it through the world-wide-web, please send a note to       |
-   | xdebug@derickrethans.nl so we can mail you a copy immediately.       |
+   | derick@xdebug.org so we can mail you a copy immediately.             |
    +----------------------------------------------------------------------+
-   | Authors:  Derick Rethans <derick@xdebug.org>                         |
+   | Authors: Derick Rethans <derick@xdebug.org>                          |
    +----------------------------------------------------------------------+
  */
 
@@ -78,6 +78,8 @@ char* xdebug_fd_read_line_delim(int socketfd, fd_buf *context, int type, unsigne
 			memcpy(context->buffer + context->buffer_size, buffer, newl);
 			context->buffer_size += newl;
 			context->buffer[context->buffer_size] = '\0';
+		} else if (newl == -1 && errno == EINTR) {
+			continue;
 		} else {
 			return NULL;
 		}
@@ -106,12 +108,11 @@ char* xdebug_fd_read_line_delim(int socketfd, fd_buf *context, int type, unsigne
 	return tmp;
 }
 
-char *xdebug_join(char *delim, xdebug_arg *args, int begin, int end)
+xdebug_str* xdebug_join(const char *delim, xdebug_arg *args, int begin, int end)
 {
 	int         i;
-	xdebug_str *ret;
+	xdebug_str *ret = xdebug_str_new();
 
-	xdebug_str_ptr_init(ret);
 	if (begin < 0) {
 		begin = 0;
 	}
@@ -123,10 +124,10 @@ char *xdebug_join(char *delim, xdebug_arg *args, int begin, int end)
 		xdebug_str_add(ret, delim, 0);
 	}
 	xdebug_str_add(ret, args->args[end], 0);
-	return ret->d;
+	return ret;
 }
 
-void xdebug_explode(char *delim, char *str, xdebug_arg *args, int limit)
+void xdebug_explode(const char *delim, char *str, xdebug_arg *args, int limit)
 {
 	char *p1, *p2, *endp;
 
@@ -161,7 +162,7 @@ void xdebug_explode(char *delim, char *str, xdebug_arg *args, int limit)
 	}
 }
 
-char* xdebug_memnstr(char *haystack, char *needle, int needle_len, char *end)
+char* xdebug_memnstr(char *haystack, const char *needle, int needle_len, char *end)
 {
 	char *p = haystack;
 	char first = *needle;
@@ -358,11 +359,7 @@ char *xdebug_path_to_url(const char *fileurl TSRMLS_DC)
 			cwd[0] = '\0';
 		}
 
-#if PHP_VERSION_ID >= 50600
 		new_state.cwd = estrdup(cwd);
-#else
-		new_state.cwd = strdup(cwd);
-#endif
 		new_state.cwd_length = strlen(cwd);
 
 		if (!virtual_file_ex(&new_state, fileurl, NULL, 1 TSRMLS_CC)) {
@@ -370,11 +367,7 @@ char *xdebug_path_to_url(const char *fileurl TSRMLS_DC)
 			tmp = xdebug_sprintf("file://%s",s);
 			efree(s);
 		}
-#if PHP_VERSION_ID >= 50600
 		efree(new_state.cwd);
-#else
-		free(new_state.cwd);
-#endif
 
 	} else if (fileurl[1] == '/' || fileurl[1] == '\\') {
 		/* convert UNC paths (eg. \\server\sharepath) */
@@ -414,7 +407,7 @@ long xdebug_crc32(const char *string, int str_len)
 }
 
 #ifndef PHP_WIN32
-static FILE *xdebug_open_file(char *fname, char *mode, char *extension, char **new_fname)
+static FILE *xdebug_open_file(char *fname, const char *mode, const char *extension, char **new_fname)
 {
 	FILE *fh;
 	char *tmp_fname;
@@ -433,7 +426,7 @@ static FILE *xdebug_open_file(char *fname, char *mode, char *extension, char **n
 	return fh;
 }
 
-static FILE *xdebug_open_file_with_random_ext(char *fname, char *mode, char *extension, char **new_fname)
+static FILE *xdebug_open_file_with_random_ext(char *fname, const char *mode, const char *extension, char **new_fname)
 {
 	FILE *fh;
 	char *tmp_fname;
@@ -453,7 +446,7 @@ static FILE *xdebug_open_file_with_random_ext(char *fname, char *mode, char *ext
 	return fh;
 }
 
-FILE *xdebug_fopen(char *fname, char *mode, char *extension, char **new_fname)
+FILE *xdebug_fopen(char *fname, const char *mode, const char *extension, char **new_fname)
 {
 	int   r;
 	FILE *fh;
@@ -618,7 +611,6 @@ int xdebug_format_output_filename(char **filename, char *format, char *script_na
 				case 'U':   /* $_SERVER['UNIQUE_ID'] */
 				case 'R': { /* $_SERVER['REQUEST_URI'] */
 					char *char_ptr, *strval;
-#if PHP_VERSION_ID >= 70000
 					zval *data = NULL;
 
 					if (Z_TYPE(PG(http_globals)[TRACK_VARS_SERVER]) == IS_ARRAY) {
@@ -636,27 +628,6 @@ int xdebug_format_output_filename(char **filename, char *format, char *script_na
 
 						if (data) {
 							strval = estrdup(Z_STRVAL_P(data));
-#else
-					int retval = FAILURE;
-					zval **data;
-
-					if (PG(http_globals)[TRACK_VARS_SERVER]) {
-						switch (*format) {
-						case 'H':
-							retval = zend_hash_find(Z_ARRVAL_P(PG(http_globals)[TRACK_VARS_SERVER]), "HTTP_HOST", sizeof("HTTP_HOST"), (void **) &data);
-							break;
-						case 'R':
-							retval = zend_hash_find(Z_ARRVAL_P(PG(http_globals)[TRACK_VARS_SERVER]), "REQUEST_URI", sizeof("REQUEST_URI"), (void **) &data);
-							break;
-						case 'U':
-							retval = zend_hash_find(Z_ARRVAL_P(PG(http_globals)[TRACK_VARS_SERVER]), "UNIQUE_ID", sizeof("UNIQUE_ID"), (void **) &data);
-							break;
-						}
-
-						if (retval == SUCCESS) {
-							strval = estrdup(Z_STRVAL_PP(data));
-#endif
-
 							/* replace slashes, dots, question marks, plus
 							 * signs, ampersands, spaces and other evil chars
 							 * with underscores */
@@ -670,29 +641,17 @@ int xdebug_format_output_filename(char **filename, char *format, char *script_na
 				}	break;
 
 				case 'S': { /* session id */
-#if PHP_VERSION_ID >= 70000
 					zval *data;
-#else
-					zval **data;
-#endif
 					char *char_ptr, *strval;
 					char *sess_name;
 
-					sess_name = zend_ini_string("session.name", sizeof("session.name"), 0);
+					sess_name = zend_ini_string((char*) "session.name", sizeof("session.name"), 0);
 
-#if PHP_VERSION_ID >= 70000
 					if (sess_name && Z_TYPE(PG(http_globals)[TRACK_VARS_COOKIE]) == IS_ARRAY &&
 						((data = zend_hash_str_find(Z_ARRVAL(PG(http_globals)[TRACK_VARS_COOKIE]), sess_name, strlen(sess_name))) != NULL) &&
 						Z_STRLEN_P(data) < 100 /* Prevent any unrealistically long data being set as filename */
 					) {
 						strval = estrdup(Z_STRVAL_P(data));
-#else
-					if (sess_name && PG(http_globals)[TRACK_VARS_COOKIE] &&
-						zend_hash_find(Z_ARRVAL_P(PG(http_globals)[TRACK_VARS_COOKIE]), sess_name, strlen(sess_name) + 1, (void **) &data) == SUCCESS &&
-						Z_STRLEN_PP(data) < 100 /* Prevent any unrealistically long data being set as filename */
-					) {
-						strval = estrdup(Z_STRVAL_PP(data));
-#endif
 						/* replace slashes, dots, question marks, plus signs,
 						 * ampersands and spaces with underscores */
 						while ((char_ptr = strpbrk(strval, "/\\.?&+ ")) != NULL) {
@@ -750,31 +709,64 @@ int xdebug_format_file_link(char **filename, const char *error_filename, int err
 	return fname.l;
 }
 
-void xdebug_open_log(TSRMLS_D)
+int xdebug_format_filename(char **formatted_name, const char *fmt, const char *default_fmt, const char *filename TSRMLS_DC)
 {
-	/* initialize remote log file */
-	XG(remote_log_file) = NULL;
-	if (XG(remote_log) && strlen(XG(remote_log))) {
-		XG(remote_log_file) = xdebug_fopen(XG(remote_log), "a", NULL, NULL);
-	}
-	if (XG(remote_log_file)) {
-		char *timestr = xdebug_get_time();
-		fprintf(XG(remote_log_file), "Log opened at %s\n", timestr);
-		fflush(XG(remote_log_file));
-		xdfree(timestr);
-	} else if (strlen(XG(remote_log))) {
-		php_log_err(xdebug_sprintf("XDebug could not open the remote debug file '%s'.", XG(remote_log)) TSRMLS_CC);
-	}
-}
+	xdebug_str fname = XDEBUG_STR_INITIALIZER;
+	char *name;
+	xdebug_str *parent, *ancester;
+	const char *full = filename;
+	xdebug_arg *parts = (xdebug_arg*) xdmalloc(sizeof(xdebug_arg));
+	char *slash = xdebug_sprintf("%c", DEFAULT_SLASH);
+	const char *format = fmt && fmt[0] ? fmt : default_fmt; /* If the format is empty, we use the default */
 
-void xdebug_close_log(TSRMLS_D)
-{
-	if (XG(remote_log_file)) {
-		char *timestr = xdebug_get_time();
-		fprintf(XG(remote_log_file), "Log closed at %s\n\n", timestr);
-		fflush(XG(remote_log_file));
-		xdfree(timestr);
-		fclose(XG(remote_log_file));
-		XG(remote_log_file) = NULL;
+	/* Create pointers for the format chars */
+	xdebug_arg_init(parts);
+	xdebug_explode(slash, (char*) filename, parts, -1);
+	name = parts->args[parts->c - 1];
+	parent = parts->c > 1 ?
+		xdebug_join(slash, parts, parts->c - 2, parts->c - 1) :
+		xdebug_str_create_from_char(name);
+	ancester = parts->c > 2 ?
+		xdebug_join(slash, parts, parts->c - 3, parts->c - 1) :
+		xdebug_str_copy(parent);
+
+	while (*format)
+	{
+		if (*format != '%') {
+			xdebug_str_addl(&fname, (char *) format, 1, 0);
+		} else {
+			format++;
+			switch (*format)
+			{
+				case 'n': /* filename */
+					xdebug_str_add(&fname, xdebug_sprintf("%s", name), 1);
+					break;
+				case 'p': /* parent */
+					xdebug_str_add(&fname, xdebug_sprintf("%s", parent->d), 1);
+					break;
+				case 'a': /* ancester */
+					xdebug_str_add(&fname, xdebug_sprintf("%s", ancester->d), 1);
+					break;
+				case 'f': /* full path */
+					xdebug_str_add(&fname, xdebug_sprintf("%s", full), 1);
+					break;
+				case 's': /* slash */
+					xdebug_str_add(&fname, xdebug_sprintf("%c", DEFAULT_SLASH), 1);
+					break;
+				case '%': /* literal % */
+					xdebug_str_addl(&fname, "%", 1, 0);
+					break;
+			}
+		}
+		format++;
 	}
+
+	xdfree(slash);
+	xdebug_str_free(ancester);
+	xdebug_str_free(parent);
+	xdebug_arg_dtor(parts);
+
+	*formatted_name = fname.d;
+
+	return fname.l;
 }

@@ -1,7 +1,5 @@
 --TEST--
 Test for bug #1166: Using $this in __debugInfo() causes infinite recursion
---SKIPIF--
-<?php if (!version_compare(phpversion(), "5.6", '>=')) echo "skip >= PHP 5.6 needed\n"; ?>
 --INI--
 xdebug.default_enable=1
 xdebug.profiler_enable=0
@@ -46,12 +44,12 @@ Stack trace:
   thrown in %sbug01166.php on line %d
 
 Call Stack:
-    %f     %d   1. {main}() %sbug01166.php:0
-    %f     %d   2. var_dump(class Foo {  }) %sbug01166.php:%d
+%w%f %w%d   1. {main}() %sbug01166.php:0
+%w%f %w%d   2. var_dump(class Foo {  }) %sbug01166.php:%d
 
 
 Fatal error: __debuginfo() must return an array in %sbug01166.php on line %d
 
 Call Stack:
-    %f     %d   1. {main}() %sbug01166.php:0
-    %f     %d   2. var_dump(class Foo {  }) %sbug01166.php:%d
+%w%f %w%d   1. {main}() %sbug01166.php:0
+%w%f %w%d   2. var_dump(class Foo {  }) %sbug01166.php:%d

@@ -2,6 +2,7 @@
 Test for bug #932: Show an error if Xdebug can't open the remote debug log.
 --SKIPIF--
 <?php if (substr(PHP_OS, 0, 3) == "WIN") die("skip Not for Windows"); ?>
+<?php if (getenv("SKIP_DBGP_TESTS")) { exit("skip Excluding DBGp tests"); } ?>
 --INI--
 xdebug.default_enable=1
 xdebug.remote_enable=1
@@ -18,5 +19,5 @@ chmod("/tmp/bug932.log", 0);
 
 unlink("/tmp/bug932.log");
 ?>
---EXPECT--
-XDebug could not open the remote debug file '/tmp/bug932.log'.
+--EXPECTF--
+Xdebug could not open the remote debug file '/tmp/bug932.log'.

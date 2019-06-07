@@ -1,4 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 
-export CFLAGS="-Wall -Werror -Wextra -Wmaybe-uninitialized -Wdeclaration-after-statement -Wmissing-field-initializers -Wshadow -Wno-unused-parameter -ggdb3"
-phpize && ./configure && make clean && make -j 5 all && make install
+bit64=`php -n -r 'echo PHP_INT_SIZE == 8 ? "1" : "0";'`
+
+if [[ ${bit64} != "1" ]]; then
+	export CFLAGS="-m32"
+fi
+phpize && ./configure --enable-xdebug-dev && make clean && make all && make install

@@ -2,17 +2,17 @@
    +----------------------------------------------------------------------+
    | Xdebug                                                               |
    +----------------------------------------------------------------------+
-   | Copyright (c) 2002-2016 Derick Rethans                               |
+   | Copyright (c) 2002-2018 Derick Rethans                               |
    +----------------------------------------------------------------------+
-   | This source file is subject to version 1.0 of the Xdebug license,    |
+   | This source file is subject to version 1.01 of the Xdebug license,   |
    | that is bundled with this package in the file LICENSE, and is        |
    | available at through the world-wide-web at                           |
-   | http://xdebug.derickrethans.nl/license.php                           |
+   | https://xdebug.org/license.php                                       |
    | If you did not receive a copy of the Xdebug license and are unable   |
    | to obtain it through the world-wide-web, please send a note to       |
-   | xdebug@derickrethans.nl so we can mail you a copy immediately.       |
+   | derick@xdebug.org so we can mail you a copy immediately.             |
    +----------------------------------------------------------------------+
-   | Authors:  Derick Rethans <derick@xdebug.org>                         |
+   | Authors: Derick Rethans <derick@xdebug.org>                          |
    +----------------------------------------------------------------------+
  */
 
@@ -27,9 +27,7 @@
 #include "zend_constants.h"
 #include "zend_extensions.h"
 #include "zend_exceptions.h"
-#if PHP_VERSION_ID >= 50500
 #include "zend_generators.h"
-#endif
 #include "zend_exceptions.h"
 #include "zend_vm.h"
 #include "zend_hash.h"
@@ -42,14 +40,15 @@
 #include "TSRM.h"
 #endif
 
-char* xdebug_start_trace(char* fname, long options TSRMLS_DC);
+char* xdebug_start_trace(char* fname, char *script_filename, long options TSRMLS_DC);
 void xdebug_stop_trace(TSRMLS_D);
 
-typedef struct xdebug_var {
-	char *name;
-	void *addr;
-	int   is_variadic;
-} xdebug_var;
+typedef struct xdebug_var_name {
+	char    *name;
+	size_t   length;
+	zval     data;
+	int      is_variadic;
+} xdebug_var_name;
 
 #define XFUNC_UNKNOWN        0x00
 #define XFUNC_NORMAL         0x01
@@ -145,6 +144,7 @@ typedef struct _xdebug_call_entry {
 	char       *function;
 	int         lineno;
 	double      time_taken;
+	long        mem_used;
 } xdebug_call_entry;
 
 typedef struct xdebug_aggregate_entry {
@@ -155,6 +155,7 @@ typedef struct xdebug_aggregate_entry {
 	int         call_count;
 	double      time_own;
 	double      time_inclusive;
+	long        mem_used;
 	HashTable  *call_list;
 } xdebug_aggregate_entry;
 
@@ -162,6 +163,7 @@ typedef struct xdebug_profile {
 	double        time;
 	double        mark;
 	long          memory;
+	long          mem_mark;
 	xdebug_llist *call_list;
 } xdebug_profile;
 
@@ -178,17 +180,19 @@ typedef struct _function_stack_entry {
 	int          function_nr;
 
 	/* argument properties */
-	int          arg_done;
-	unsigned int varc;
-	xdebug_var   *var;
-#if PHP_VERSION_ID >= 50600
-	int          is_variadic;
-#endif
-	zval        *return_value;
-	xdebug_llist *used_vars;
-	HashTable   *symbol_table;
+	int                arg_done;
+	unsigned int       varc;
+	xdebug_var_name   *var;
+	int                is_variadic;
+	zval              *return_value;
+	xdebug_llist      *declared_vars;
+	HashTable         *symbol_table;
 	zend_execute_data *execute_data;
-	zval        *This;
+	zval              *This;
+
+	/* filter properties */
+	long         filtered_tracing;
+	long         filtered_code_coverage;
 
 	/* tracing properties */
 	signed long  memory;
@@ -216,7 +220,7 @@ function_stack_entry *xdebug_get_stack_tail(TSRMLS_D);
 
 typedef struct
 {
-	void *(*init)(char *fname, long options TSRMLS_DC);
+	void *(*init)(char *fname, char *script_filename, long options TSRMLS_DC);
 	void (*deinit)(void *ctxt TSRMLS_DC);
 	void (*write_header)(void *ctxt TSRMLS_DC);
 	void (*write_footer)(void *ctxt TSRMLS_DC);
@@ -224,15 +228,12 @@ typedef struct
 	void (*function_entry)(void *ctxt, function_stack_entry *fse, int function_nr TSRMLS_DC);
 	void (*function_exit)(void *ctxt, function_stack_entry *fse, int function_nr TSRMLS_DC);
 	void (*return_value)(void *ctxt, function_stack_entry *fse, int function_nr, zval *return_value TSRMLS_DC);
-#if PHP_VERSION_ID >= 50500
 	void (*generator_return_value)(void *ctxt, function_stack_entry *fse, int function_nr, zend_generator *generator TSRMLS_DC);
-#endif
-	void (*assignment)(void *ctxt, function_stack_entry *fse, char *full_varname, zval *value, char *op, char *file, int lineno TSRMLS_DC);
+	void (*assignment)(void *ctxt, function_stack_entry *fse, char *full_varname, zval *value, char *right_full_varname, const char *op, char *file, int lineno TSRMLS_DC);
 } xdebug_trace_handler_t;
 
 
-xdebug_hash* xdebug_used_var_hash_from_llist(xdebug_llist *list);
-void xdebug_init_debugger(TSRMLS_D);
+xdebug_hash* xdebug_declared_var_hash_from_llist(xdebug_llist *list);
 
 #endif
 

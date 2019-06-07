@@ -1,8 +1,5 @@
 --TEST--
-Test for bug #756: Tracing doesn't always understand the variables and shows IS_VAR (>= PHP 7.0)
---SKIPIF--
-<?php if (!version_compare(phpversion(), "7.0", '>=')) echo "skip >= PHP 7.0 needed\n"; ?>
-<?php if (extension_loaded('zend opcache')) echo "skip opcache should not be loaded\n"; ?>
+Test for bug #756: Tracing doesn't always understand the variables and shows IS_VAR
 --INI--
 xdebug.auto_trace=0
 xdebug.trace_options=0
@@ -53,12 +50,12 @@ TRACE START [%d-%d-%d %d:%d:%d]
 %w%f %w%d      >=> '%sxdt%s.%s.xt'
                            => $trace_file = '%sxdt%s.%s.xt' %sbug00756-php7.php:19
 %w%f %w%d     -> foo::bar() %sbug00756-php7.php:21
-                             => self::bar++ %sbug00756-php7.php:9
+                             => %r(\+\+self::bar|self::bar\+\+)%r %sbug00756-php7.php:9
 %w%f %w%d     -> foo->__construct() %sbug00756-php7.php:22
-                             => $this->foo++ %sbug00756-php7.php:14
+                             => %r(\$this->foo\+\+|\+\+\$this->foo)%r %sbug00756-php7.php:14
                            => $f = class foo { public $foo = 1 } %sbug00756-php7.php:22
 %w%f %w%d     -> foo->__construct() %sbug00756-php7.php:23
-                             => $this->foo++ %sbug00756-php7.php:14
+                             => %r(\$this->foo\+\+|\+\+\$this->foo)%r %sbug00756-php7.php:14
 %w%f %w%d     -> xdebug_stop_trace() %sbug00756-php7.php:25
 %w%f %w%d
 TRACE END   [%d-%d-%d %d:%d:%d]

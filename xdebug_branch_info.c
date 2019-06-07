@@ -1,12 +1,12 @@
 /*
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2016 Derick Rethans                               |
+   | Copyright (c) 1997-2018 Derick Rethans                               |
    +----------------------------------------------------------------------+
    | This source file is subject to the 2-Clause BSD license which is     |
    | available through the LICENSE file, or online at                     |
    | http://opensource.org/licenses/bsd-license.php                       |
    +----------------------------------------------------------------------+
-   | Authors:  Derick Rethans <derick@derickrethans.nl>                   |
+   | Authors: Derick Rethans <derick@derickrethans.nl>                    |
    +----------------------------------------------------------------------+
  */
 #include <stdlib.h>
@@ -55,13 +55,21 @@ void xdebug_branch_info_free(xdebug_branch_info *branch_info)
 void xdebug_branch_info_update(xdebug_branch_info *branch_info, unsigned int pos, unsigned int lineno, unsigned int outidx, unsigned int jump_pos)
 {
 	xdebug_set_add(branch_info->ends, pos);
-	branch_info->branches[pos].out[outidx] = jump_pos;
+	if (outidx < XDEBUG_BRANCH_MAX_OUTS) {
+		branch_info->branches[pos].outs[outidx] = jump_pos;
+		if (outidx + 1 > branch_info->branches[pos].outs_count) {
+			branch_info->branches[pos].outs_count = outidx + 1;
+		}
+	}
 	branch_info->branches[pos].start_lineno = lineno;
 }
 
 static void only_leave_first_catch(zend_op_array *opa, xdebug_branch_info *branch_info, int position)
 {
 	unsigned int exit_jmp;
+#if PHP_VERSION_ID >= 70300 && ZEND_USE_ABS_JMP_ADDR
+	zend_op *base_address = &(opa->opcodes[0]);
+#endif
 
 	if (opa->opcodes[position].opcode == ZEND_FETCH_CLASS) {
 		position++;
@@ -73,11 +81,16 @@ static void only_leave_first_catch(zend_op_array *opa, xdebug_branch_info *branc
 
 	xdebug_set_remove(branch_info->entry_points, position);
 
-	if (!opa->opcodes[position].result.num) {
-#if PHP_VERSION_ID >= 70100
-		exit_jmp = position + ((signed int) opa->opcodes[position].extended_value / sizeof(zend_op));
+#if PHP_VERSION_ID >= 70300
+	if (!(opa->opcodes[position].extended_value & ZEND_LAST_CATCH)) {
+		exit_jmp = XDEBUG_ZNODE_JMP_LINE(opa->opcodes[position].op2, position, base_address);
 #else
+	if (!opa->opcodes[position].result.num) {
+# if PHP_VERSION_ID >= 70100
+		exit_jmp = position + ((signed int) opa->opcodes[position].extended_value / sizeof(zend_op));
+# else
 		exit_jmp = opa->opcodes[position].extended_value;
+# endif
 #endif
 
 		if (opa->opcodes[exit_jmp].opcode == ZEND_FETCH_CLASS) {
@@ -93,12 +106,23 @@ void xdebug_branch_post_process(zend_op_array *opa, xdebug_branch_info *branch_i
 {
 	unsigned int i;
 	int          in_branch = 0, last_start = -1;
+#if PHP_VERSION_ID >= 70300 && ZEND_USE_ABS_JMP_ADDR
+	zend_op *base_address = &(opa->opcodes[0]);
+#endif
 
 	/* Figure out which CATCHes are chained, and hence which ones should be
 	 * considered entry points */
 	for (i = 0; i < branch_info->entry_points->size; i++) {
 		if (xdebug_set_in(branch_info->entry_points, i) && opa->opcodes[i].opcode == ZEND_CATCH) {
-#if PHP_VERSION_ID >= 70100
+#if PHP_VERSION_ID >= 70300
+# if ZEND_USE_ABS_JMP_ADDR
+			if (opa->opcodes[i].op2.jmp_addr != NULL) {
+# else
+			if (opa->opcodes[i].op2.jmp_offset != 0) {
+# endif
+				only_leave_first_catch(opa, branch_info, XDEBUG_ZNODE_JMP_LINE(opa->opcodes[i].op2, i, base_address));
+			}
+#elif PHP_VERSION_ID >= 70100
 			only_leave_first_catch(opa, branch_info, i + ((signed int) opa->opcodes[i].extended_value / sizeof(zend_op)));
 #else
 			only_leave_first_catch(opa, branch_info, opa->opcodes[i].extended_value);
@@ -109,7 +133,8 @@ void xdebug_branch_post_process(zend_op_array *opa, xdebug_branch_info *branch_i
 	for (i = 0; i < branch_info->starts->size; i++) {
 		if (xdebug_set_in(branch_info->starts, i)) {
 			if (in_branch) {
-				branch_info->branches[last_start].out[0] = i;
+				branch_info->branches[last_start].outs_count = 1;
+				branch_info->branches[last_start].outs[0] = i;
 				branch_info->branches[last_start].end_op = i-1;
 				branch_info->branches[last_start].end_lineno = branch_info->branches[i].start_lineno;
 			}
@@ -117,8 +142,12 @@ void xdebug_branch_post_process(zend_op_array *opa, xdebug_branch_info *branch_i
 			in_branch = 1;
 		}
 		if (xdebug_set_in(branch_info->ends, i)) {
-			branch_info->branches[last_start].out[0] = branch_info->branches[i].out[0];
-			branch_info->branches[last_start].out[1] = branch_info->branches[i].out[1];
+			size_t j;
+
+			for (j = 0; j < branch_info->branches[i].outs_count; j++) {
+				branch_info->branches[last_start].outs[j] = branch_info->branches[i].outs[j];
+			}
+			branch_info->branches[last_start].outs_count = branch_info->branches[i].outs_count;
 			branch_info->branches[last_start].end_op = i;
 			branch_info->branches[last_start].end_lineno = branch_info->branches[i].start_lineno;
 			in_branch = 0;
@@ -223,9 +252,10 @@ static int xdebug_path_exists(xdebug_path *path, unsigned int elem1, unsigned in
 
 static void xdebug_branch_find_path(unsigned int nr, xdebug_branch_info *branch_info, xdebug_path *prev_path)
 {
-	unsigned int out0, out1, last;
+	unsigned int last;
 	xdebug_path *new_path;
 	int found = 0;
+	size_t i = 0;
 
 	if (branch_info->path_info.paths_count > 4095) {
 		return;
@@ -233,19 +263,17 @@ static void xdebug_branch_find_path(unsigned int nr, xdebug_branch_info *branch_
 
 	new_path = xdebug_path_new(prev_path);
 	xdebug_path_add(new_path, nr);
-	out0 = branch_info->branches[nr].out[0];
-	out1 = branch_info->branches[nr].out[1];
 
 	last = xdebug_branch_find_last_element(new_path);
 
-	if (out0 != 0 && out0 != XDEBUG_JMP_EXIT && !xdebug_path_exists(new_path, last, out0)) {
-		xdebug_branch_find_path(out0, branch_info, new_path);
-		found = 1;
+	for (i = 0; i < branch_info->branches[nr].outs_count; i++) {
+		int out = branch_info->branches[nr].outs[i];
+		if (out != 0 && out != XDEBUG_JMP_EXIT && !xdebug_path_exists(new_path, last, out)) {
+			xdebug_branch_find_path(out, branch_info, new_path);
+			found = 1;
+		}
 	}
-	if (out1 != 0 && out1 != XDEBUG_JMP_EXIT && !xdebug_path_exists(new_path, last, out1)) {
-		xdebug_branch_find_path(out1, branch_info, new_path);
-		found = 1;
-	}
+
 	if (!found) {
 		xdebug_path_info_add_path(&(branch_info->path_info), new_path);
 	} else {
@@ -279,6 +307,8 @@ void xdebug_path_info_dtor(xdebug_path_info *path_info)
 		xdebug_hash_destroy(path_info->path_hash);
 		path_info->path_hash = NULL;
 	}
+	
+	xdfree(path_info);
 }
 
 void xdebug_create_key_for_path(xdebug_path *path, xdebug_str *str)
@@ -322,42 +352,13 @@ void xdebug_path_info_dump(xdebug_path *path TSRMLS_DC)
 	printf("\n");
 }
 
-void xdebug_branch_info_dump(zend_op_array *opa, xdebug_branch_info *branch_info TSRMLS_DC)
-{
-	unsigned int i;
-
-	for (i = 0; i < branch_info->starts->size; i++) {
-		if (xdebug_set_in(branch_info->starts, i)) {
-			printf("branch: #%3d; line: %5d-%5d; sop: %5d; eop: %5d",
-				i,
-				branch_info->branches[i].start_lineno,
-				branch_info->branches[i].end_lineno,
-				i,
-				branch_info->branches[i].end_op
-			);
-			if (branch_info->branches[i].out[0]) {
-				printf("; out1: %3d", branch_info->branches[i].out[0]);
-			}
-			if (branch_info->branches[i].out[1]) {
-				printf("; out2: %3d", branch_info->branches[i].out[1]);
-			}
-			printf("\n");
-		}
-	}
-
-	for (i = 0; i < branch_info->path_info.paths_count; i++) {
-		printf("path #%d: ", i + 1);
-		xdebug_path_info_dump(branch_info->path_info.paths[i] TSRMLS_CC);
-	}
-}
-
 void xdebug_branch_info_mark_reached(char *file_name, char *function_name, zend_op_array *op_array, long opcode_nr TSRMLS_DC)
 {
 	xdebug_coverage_file *file;
 	xdebug_coverage_function *function;
 	xdebug_branch_info *branch_info;
 
-	if (strcmp(XG(previous_mark_filename), file_name) == 0) {
+	if (XG(previous_mark_filename) && strcmp(XG(previous_mark_filename), file_name) == 0) {
 		file = XG(previous_mark_file);
 	} else {
 		if (!xdebug_hash_find(XG(code_coverage), file_name, strlen(file_name), (void *) &file)) {
@@ -390,11 +391,12 @@ void xdebug_branch_info_mark_reached(char *file_name, char *function_name, zend_
 
 		/* Mark out for previous branch, if one is set */
 		if (XG(branches).last_branch_nr[XG(level)] != -1) {
-			if (branch_info->branches[XG(branches).last_branch_nr[XG(level)]].out[0] == opcode_nr) {
-				branch_info->branches[XG(branches).last_branch_nr[XG(level)]].out_hit[0] = 1;
-			}
-			if (branch_info->branches[XG(branches).last_branch_nr[XG(level)]].out[1] == opcode_nr) {
-				branch_info->branches[XG(branches).last_branch_nr[XG(level)]].out_hit[1] = 1;
+			size_t i = 0;
+
+			for (i = 0; i < branch_info->branches[XG(branches).last_branch_nr[XG(level)]].outs_count; i++) {
+				if (branch_info->branches[XG(branches).last_branch_nr[XG(level)]].outs[i] == opcode_nr) {
+					branch_info->branches[XG(branches).last_branch_nr[XG(level)]].outs_hit[i] = 1;
+				}
 			}
 		}
 
@@ -418,7 +420,7 @@ void xdebug_branch_info_mark_end_of_function_reached(char *filename, char *funct
 	xdebug_branch_info *branch_info;
 	xdebug_path *path;
 
-	if (strcmp(XG(previous_mark_filename), filename) == 0) {
+	if (XG(previous_mark_filename) && strcmp(XG(previous_mark_filename), filename) == 0) {
 		file = XG(previous_mark_file);
 	} else {
 		if (!xdebug_hash_find(XG(code_coverage), filename, strlen(filename), (void *) &file)) {
@@ -451,7 +453,7 @@ void xdebug_branch_info_add_branches_and_paths(char *filename, char *function_na
 	xdebug_coverage_file *file;
 	xdebug_coverage_function *function;
 
-	if (strcmp(XG(previous_filename), filename) == 0) {
+	if (XG(previous_filename) && strcmp(XG(previous_filename), filename) == 0) {
 		file = XG(previous_file);
 	} else {
 		/* Check if the file already exists in the hash */
