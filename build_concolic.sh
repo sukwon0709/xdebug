@@ -20,8 +20,12 @@ UCPHP_LDFLAGS="-L${UCPHP_PATH} -L${STACK_PATH}/lib/ghc-8.6.4/rts"
 UCPHP_LIBS="-L${UCPHP_PATH} -luc_php -Wl,-rpath,/home/soh/git/uc-php"
 HASKELL_LIBS="-L${STACK_PATH}/lib/ghc-8.6.4/rts -lHSrts-ghc8.6.4 -Wl,-rpath,${STACK_PATH}/lib/ghc-8.6.4/rts"
 
-CFLAGS="${HASKELL_CFLAGS} ${ZLOG_CFLAGS} ${XXHASH_CFLAGS} ${UCPHP_CFLAGS} -DDISABLE_STRING_INTERNING -ggdb3 --coverage"
+PROTOBUF_CLIENT_PATH=/home/soh/git/uc-php/dependencies/uc-php-proto-client
+PROTOBUF_CLIENT_CFLAGS="-I${PROTOBUF_CLIENT_PATH}/includes"
+PROTOBUF_CLIENT_LIBS="-L{$UCPHP_PATH} -lucphp_proto_client -Wl,-rpath,/home/soh/git/uc-php"
+
+CFLAGS="${HASKELL_CFLAGS} ${ZLOG_CFLAGS} ${XXHASH_CFLAGS} ${UCPHP_CFLAGS} ${PROTOBUF_CLIENT_CFLAGS} -DDISABLE_STRING_INTERNING -ggdb3 --coverage"
 LDFLAGS="${HASKELL_LDFLAGS} ${ZLOG_LDFLAGS} ${XXHASH_LDFLAGS} ${UCPHP_LDFLAGS} --coverage"
-LIBS="${ZLOG_LIBS} ${XXHASH_LIBS} ${UCPHP_LIBS} ${HASKELL_LIBS}"
+LIBS="${ZLOG_LIBS} ${XXHASH_LIBS} ${UCPHP_LIBS} ${PROTOBUF_CLIENT_LIBS} ${HASKELL_LIBS}"
 
 ./configure --prefix=${PREFIX_PATH} --with-php-config=${PREFIX_PATH}/bin/php-config CFLAGS="${CFLAGS}" LDFLAGS="${LDFLAGS}" LIBS="${LIBS}"
