@@ -22,7 +22,7 @@ HASKELL_LIBS="-L${STACK_PATH}/lib/ghc-8.6.4/rts -lHSrts-ghc8.6.4 -Wl,-rpath,${ST
 
 PROTOBUF_CLIENT_PATH=/home/soh/git/uc-php/dependencies/uc-php-proto-client
 PROTOBUF_CLIENT_CFLAGS="-I${PROTOBUF_CLIENT_PATH}/includes"
-PROTOBUF_CLIENT_LIBS="-L{$UCPHP_PATH} -lucphp_proto_client -Wl,-rpath,/home/soh/git/uc-php"
+PROTOBUF_CLIENT_LIBS="-L${PROTOBUF_CLIENT_PATH} -lucphp_proto_client -Wl,-rpath,/home/soh/git/uc-php"
 
 CFLAGS="${HASKELL_CFLAGS} ${ZLOG_CFLAGS} ${XXHASH_CFLAGS} ${UCPHP_CFLAGS} ${PROTOBUF_CLIENT_CFLAGS} -DDISABLE_STRING_INTERNING -ggdb3 --coverage"
 LDFLAGS="${HASKELL_LDFLAGS} ${ZLOG_LDFLAGS} ${XXHASH_LDFLAGS} ${UCPHP_LDFLAGS} --coverage"
