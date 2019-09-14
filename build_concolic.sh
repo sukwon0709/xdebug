@@ -20,7 +20,11 @@ UCPHP_LIBS="-L${UCPHP_PATH} -luc_php -Wl,-rpath,/home/soh/git/uc-php"
 UCPHP2_LIBS="-L${UCPHP_PATH} -luc_php2 -Wl,-rpath,/home/soh/git/uc-php"
 HASKELL_LIBS="-L${STACK_PATH}/lib/ghc-8.6.4/rts -lHSrts-ghc8.6.4 -Wl,-rpath,${STACK_PATH}/lib/ghc-8.6.4/rts"
 
-CFLAGS="${HASKELL_CFLAGS} ${ZLOG_CFLAGS} ${XXHASH_CFLAGS} ${UCPHP_CFLAGS} -DDISABLE_STRING_INTERNING -ggdb3 --coverage"
+PROTOBUF_CLIENT_PATH=/home/soh/git/uc-php/dependencies/uc-php-proto-client
+PROTOBUF_CLIENT_CFLAGS="-I${PROTOBUF_CLIENT_PATH}/includes"
+PROTOBUF_CLIENT_LIBS="-L${PROTOBUF_CLIENT_PATH} -lucphp_proto_client -Wl,-rpath,/home/soh/git/uc-php"
+
+CFLAGS="${HASKELL_CFLAGS} ${ZLOG_CFLAGS} ${XXHASH_CFLAGS} ${UCPHP_CFLAGS} ${PROTOBUF_CLIENT_CFLAGS} -DDISABLE_STRING_INTERNING -ggdb3 --coverage"
 LDFLAGS="${HASKELL_LDFLAGS} ${ZLOG_LDFLAGS} ${XXHASH_LDFLAGS} ${UCPHP_LDFLAGS} --coverage"
 LIBS="${ZLOG_LIBS} ${XXHASH_LIBS} ${UCPHP_LIBS} ${UCPHP2_LIBS} ${HASKELL_LIBS}"
 
